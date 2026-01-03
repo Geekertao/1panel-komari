@@ -1,64 +1,73 @@
 #!/bin/bash
-# Komari 1Panel 生产部署脚本
-# 功能: 下载、验证、解压、备份、权限设置
+# Komari 1Panel 生产部署脚本 - 自动提权版本
+# 使用方法: bash -c "$(curl -sSL https://1panel.komari.wiki/install.sh)"
 
 set -euo pipefail
 
 # ==================== 配置 ====================
-readonly DOWNLOAD_URL="https://1panel.komari.wiki/deploy.zip"
+readonly DOWNLOAD_URL="https://1panel.komari.wiki/komari.zip"
 readonly TARGET_DIR="/opt/1panel/resource/apps/local"
 readonly BACKUP_DIR="/opt/1panel/resource/apps/backups"
-readonly LOG_FILE="/var/log/komari_install.log"
 readonly TEMP_DIR=$(mktemp -d)
 
-# ==================== 日志函数 ====================
-log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
-}
+# ==================== 权限检查 ====================
+# 如果不是root用户，提示用户使用sudo重新执行
+if [[ $EUID -ne 0 ]]; then
+    cat << 'EOF' >&2
 
+需要root权限来执行安装操作。
+请使用以下命令运行此脚本：
+
+  sudo bash -c "$(curl -sSL https://1panel.komari.wiki/install.sh)"
+
+或者先下载再执行：
+  curl -sSL https://1panel.komari.wiki/install.sh -o install.sh
+  sudo bash install.sh
+
+EOF
+    exit 1
+fi
+
+# ==================== 主逻辑 ====================
 error_exit() {
-    log "ERROR: $*"
+    echo "ERROR: $*" >&2
     rm -rf "$TEMP_DIR"
     exit 1
 }
 
 success_exit() {
-    log "SUCCESS: $*"
+    echo "SUCCESS: $*"
     rm -rf "$TEMP_DIR"
     exit 0
 }
 
-# ==================== 主流程 ====================
 main() {
-    log "开始安装 Komari 到 1Panel"
+    echo "开始安装 Komari 到 1Panel"
     
-    # 1. 权限检查
-    [[ $EUID -eq 0 ]] || error_exit "需要 root 权限运行"
-    
-    # 2. 检查 1Panel 目录
+    # 1. 检查 1Panel 目录
     [[ -d "$TARGET_DIR" ]] || error_exit "1Panel 目录不存在: $TARGET_DIR"
     
-    # 3. 备份旧版本
+    # 2. 备份旧版本
     if [[ -d "$TARGET_DIR/komari" ]]; then
-        log "发现旧版本，创建备份..."
+        echo "发现旧版本，创建备份..."
         mkdir -p "$BACKUP_DIR"
         tar -czf "$BACKUP_DIR/komari_$(date +%Y%m%d_%H%M%S).tar.gz" -C "$TARGET_DIR" komari
     fi
     
-    # 4. 下载
-    log "下载部署包..."
-    if ! wget -q --timeout=30 --tries=3 -O "$TEMP_DIR/deploy.zip" "$DOWNLOAD_URL"; then
+    # 3. 下载
+    echo "下载部署包..."
+    if ! wget -q --timeout=30 --tries=3 -O "$TEMP_DIR/komari.zip" "$DOWNLOAD_URL"; then
         error_exit "下载失败，请检查网络和 URL"
     fi
     
-    # 5. 验证文件
-    [[ -s "$TEMP_DIR/deploy.zip" ]] || error_exit "下载文件为空"
+    # 4. 验证文件
+    [[ -s "$TEMP_DIR/komari.zip" ]] || error_exit "下载文件为空"
     
-    # 6. 解压
-    log "解压到 $TARGET_DIR..."
-    unzip -o -q "$TEMP_DIR/deploy.zip" -d "$TARGET_DIR"
+    # 5. 解压
+    echo "解压到 $TARGET_DIR..."
+    unzip -o -q "$TEMP_DIR/komari.zip" -d "$TARGET_DIR"
     
-    # 7. 验证结构
+    # 6. 验证结构
     local required_files=(
         "komari/data.yml"
         "komari/logo.png"
@@ -71,15 +80,14 @@ main() {
         [[ -f "$TARGET_DIR/$file" ]] || error_exit "文件缺失: $file"
     done
     
-    # 8. 设置权限
-    chown -R 1panel:1panel "$TARGET_DIR/komari" 2>/dev/null || true
+    # 7. 设置权限
     chmod -R 755 "$TARGET_DIR/komari"
     
-    # 9. 清理
+    # 8. 清理
     rm -rf "$TEMP_DIR"
     
-    # 10. 成功提示
-    cat << EOF | tee -a "$LOG_FILE"
+    # 9. 成功提示
+    cat << EOF
 
 ================================
 ✓ Komari 安装成功！
@@ -93,13 +101,11 @@ main() {
 5. 点击安装
 
 应用路径: $TARGET_DIR/komari
-日志文件: $LOG_FILE
 
 EOF
     
     success_exit "Komari 已成功部署到 1Panel"
 }
 
-# ==================== 执行 ====================
 trap 'error_exit "脚本异常终止"' ERR
 main "$@"
