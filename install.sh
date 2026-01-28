@@ -15,7 +15,7 @@ readonly TEMP_DIR=$(mktemp -d)
 if [[ $EUID -ne 0 ]]; then
     cat << 'EOF' >&2
 
-需要root权限来执行安装操作。
+需要root权限来执行添加操作。
 请使用以下命令运行此脚本：
 
   sudo bash -c "$(curl -sSL https://1panel.komari.wiki/install.sh)"
@@ -42,7 +42,7 @@ success_exit() {
 }
 
 main() {
-    echo "开始安装 Komari 到 1Panel"
+    echo "开始添加 Komari 到 1Panel 应用商店"
     
     # 1. 检查 1Panel 目录
     [[ -d "$TARGET_DIR" ]] || error_exit "1Panel 目录不存在: $TARGET_DIR"
