@@ -114,6 +114,7 @@ main() {
 应用路径: $TARGET_DIR/komari
 
 EOF
+        success_exit "Komari 已成功更新到 1Panel 应用商店"
     else
         cat << EOF
 
@@ -131,9 +132,8 @@ EOF
 应用路径: $TARGET_DIR/komari
 
 EOF
+        success_exit "Komari 已成功添加到 1Panel 应用商店"
     fi
-    
-    success_exit "Komari 已成功添加到 1Panel 应用商店"
 }
 
 trap 'error_exit "脚本异常终止"' ERR
