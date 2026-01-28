@@ -47,11 +47,21 @@ main() {
     # 1. 检查 1Panel 目录
     [[ -d "$TARGET_DIR" ]] || error_exit "1Panel 目录不存在: $TARGET_DIR"
     
-    # 2. 备份旧版本
+    # 2. 备份旧版本并检测现有容器
+    local has_existing_container=false
+    
     if [[ -d "$TARGET_DIR/komari" ]]; then
         echo "发现旧版本，创建备份..."
         mkdir -p "$BACKUP_DIR"
         tar -czf "$BACKUP_DIR/komari_$(date +%Y%m%d_%H%M%S).tar.gz" -C "$TARGET_DIR" komari
+        
+        # 检测是否有Docker容器同时包含komari和1panel
+        if command -v docker &> /dev/null; then
+            if docker ps -a --filter "name=komari" --filter "name=1panel" --format '{{.Names}}' | grep -q .; then
+                has_existing_container=true
+                echo "检测到已存在的 Komari Docker 容器"
+            fi
+        fi
     fi
     
     # 3. 下载
@@ -86,8 +96,26 @@ main() {
     # 8. 清理
     rm -rf "$TEMP_DIR"
     
-    # 9. 成功提示
-    cat << EOF
+    # 9. 成功提示（根据是否检测到现有容器显示不同指引）
+    if [[ "$has_existing_container" == true ]]; then
+        cat << EOF
+
+================================
+✓ Komari 在 1panel 应用商店更新成功！
+================================
+
+请按以下步骤完成更新：
+1. 登录 1Panel 管理面板
+2. 进入 应用商店
+3. 点击 同步本地应用
+4. 点击顶部 可升级
+5. 找到 komari，点击升级即可
+
+应用路径: $TARGET_DIR/komari
+
+EOF
+    else
+        cat << EOF
 
 ================================
 ✓ Komari 添加至 1panel 应用商店成功！
@@ -103,6 +131,7 @@ main() {
 应用路径: $TARGET_DIR/komari
 
 EOF
+    fi
     
     success_exit "Komari 已成功添加到 1Panel 应用商店"
 }
