@@ -90,7 +90,7 @@ main() {
     cat << EOF
 
 ================================
-✓ Komari 安装成功！
+✓ Komari 添加至 1panel 应用商店成功！
 ================================
 
 请按以下步骤完成安装：
@@ -98,13 +98,13 @@ main() {
 2. 进入 应用商店
 3. 点击 同步本地应用
 4. 搜索 "komari" 或查看 "实用工具" 分类
-5. 点击安装
+5. 点击安装，可自行更改配置
 
 应用路径: $TARGET_DIR/komari
 
 EOF
     
-    success_exit "Komari 已成功部署到 1Panel"
+    success_exit "Komari 已成功添加到 1Panel 应用商店"
 }
 
 trap 'error_exit "脚本异常终止"' ERR

@@ -1,0 +1,88 @@
+name: Sync Komari Release
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      force_version:
+        description: '强制指定版本（留空则自动检测）'
+        required: false
+        default: ''
+
+jobs:
+  sync-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Detect versions
+        id: detect
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_VERSION: ${{ github.event.inputs.force_version }}
+        run: |
+          # 获取上游最新版本
+          if [ -n "$INPUT_VERSION" ]; then
+            NEW_VERSION="${INPUT_VERSION#v}"
+          else
+            LATEST_TAG=$(gh release view --repo komari-monitor/komari --json tagName -q '.tagName')
+            NEW_VERSION="${LATEST_TAG#v}"
+          fi
+          
+          # 从install.sh提取当前版本（假设格式：komari/X.X.X/...）
+          CURRENT_VERSION=$(grep -oP 'komari/\K[0-9]+\.[0-9]+\.[0-9]+' install.sh | head -1)
+          
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "Upstream: $NEW_VERSION | Current: $CURRENT_VERSION"
+      
+      - name: Update files
+        if: steps.detect.outputs.new_version != steps.detect.outputs.current_version || github.event.inputs.force_version != ''
+        env:
+          OLD_VER: ${{ steps.detect.outputs.current_version }}
+          NEW_VER: ${{ steps.detect.outputs.new_version }}
+        run: |
+          echo "Updating $OLD_VER → $NEW_VER"
+          
+          # 1. 重命名版本文件夹
+          mv "komari/${OLD_VER}" "komari/${NEW_VER}"
+          
+          # 2. 更新docker-compose.yml中的镜像版本
+          sed -i "s|ghcr.io/komari-monitor/komari:${OLD_VER}|ghcr.io/komari-monitor/komari:${NEW_VER}|g" \
+            "komari/${NEW_VER}/docker-compose.yml"
+          
+          # 3. 更新install.sh中的版本号引用（验证列表）
+          sed -i "s|${OLD_VER}/data.yml|${NEW_VER}/data.yml|g" install.sh
+          sed -i "s|${OLD_VER}/docker-compose.yml|${NEW_VER}/docker-compose.yml|g" install.sh
+          
+          # 4. 重新打包zip（排除旧zip和git目录）
+          rm -f komari.zip
+          zip -r komari.zip komari/ -x "*.git*"
+          
+          echo "Done. Updated:"
+          ls -la "komari/${NEW_VER}/"
+      
+      - name: Commit changes
+        if: steps.detect.outputs.new_version != steps.detect.outputs.current_version || github.event.inputs.force_version != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add install.sh komari.zip
+          git add "komari/${{ steps.detect.outputs.new_ver }}" || true
+          # 删除旧版本目录的git记录（已重命名）
+          git add -u "komari/" || true
+          
+          git commit -m "chore: bump to v${{ steps.detect.outputs.new_version }}
+          
+          - Rename komari/${{ steps.detect.outputs.current_version }} → ${{ steps.detect.outputs.new_version }}
+          - Update docker-compose.yml image tag
+          - Update install.sh validation paths
+          - Regenerate komari.zip"
+          
+          git push
