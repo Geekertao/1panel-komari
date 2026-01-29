@@ -6,12 +6,16 @@ set -euo pipefail
 
 # ==================== 配置 ====================
 readonly DOWNLOAD_URL="https://1panel.komari.wiki/komari.zip"
+readonly DOWNLOAD_URL_BACKUP="https://1p.komari.wiki/komari.zip"
+readonly INSTALL_URL="https://1panel.komari.wiki/install.sh"
+readonly INSTALL_URL_BACKUP="https://1p.komari.wiki/install.sh"
 readonly TARGET_DIR="/opt/1panel/resource/apps/local"
 readonly BACKUP_DIR="/opt/1panel/resource/apps/backups"
 readonly TEMP_DIR=$(mktemp -d)
+readonly CMD_NAME="1panel-komari"
+readonly CMD_PATH="/usr/local/bin/${CMD_NAME}"
 
 # ==================== 权限检查 ====================
-# 如果不是root用户，提示用户使用sudo重新执行
 if [[ $EUID -ne 0 ]]; then
     cat << 'EOF' >&2
 
@@ -28,6 +32,68 @@ EOF
     exit 1
 fi
 
+# ==================== 安装快捷命令封装器 ====================
+install_wrapper() {
+    # 如果已经存在且内容相同，跳过
+    if [[ -f "$CMD_PATH" ]]; then
+        return 0
+    fi
+    
+    echo "首次运行，正在安装快捷命令 ${CMD_NAME}..."
+    
+    # 注意：这里使用双引号heredoc以便插入变量，但需转义$
+    cat > "$CMD_PATH" << EOF
+#!/bin/bash
+# 1Panel-Komari 快捷命令封装器
+# 每次运行自动拉取最新脚本
+
+set -euo pipefail
+
+readonly SCRIPT_URL="${INSTALL_URL}"
+readonly SCRIPT_URL_BACKUP="${INSTALL_URL_BACKUP}"
+
+# 自动提权：如果不是root，使用sudo重新执行
+if [[ \$EUID -ne 0 ]]; then
+    exec sudo "\$0" "\$@"
+fi
+
+# 先尝试主地址，失败则尝试备用
+if ! curl -sSL "\${SCRIPT_URL}" | bash -s -- "\$@"; then
+    echo "主地址拉取失败，尝试备用地址..." >&2
+    if ! curl -sSL "\${SCRIPT_URL_BACKUP}" | bash -s -- "\$@"; then
+        echo "ERROR: 主备地址均不可用，请检查网络" >&2
+        exit 1
+    fi
+fi
+EOF
+
+    chmod +x "$CMD_PATH"
+    
+    cat << EOF
+
+================================
+✓ 快捷命令已安装: ${CMD_NAME}
+================================
+
+以后你可以直接使用以下命令运行：
+
+  ${CMD_NAME}              # 自动拉取并执行最新脚本
+  sudo ${CMD_NAME}         # 显式使用管理员权限
+
+EOF
+    
+    # 如果当前是通过curl管道执行的，提示用户下次使用方式
+    if [[ ! -t 0 ]]; then
+        cat << 'EOF'
+提示：由于你是通过管道执行(curl | bash)，本次仍会继续执行安装。
+下次请直接使用上面的命令。
+
+按回车键继续，或按 Ctrl+C 退出...
+EOF
+        read -r
+    fi
+}
+
 # ==================== 主逻辑 ====================
 error_exit() {
     echo "ERROR: $*" >&2
@@ -42,6 +108,9 @@ success_exit() {
 }
 
 main() {
+    # 安装快捷命令（首次运行）
+    install_wrapper
+    
     echo "开始添加 Komari 到 1Panel 应用商店"
     
     # 1. 检查 1Panel 目录
@@ -64,10 +133,14 @@ main() {
         fi
     fi
     
-    # 3. 下载
+    # 3. 下载（主备切换）
     echo "下载部署包..."
     if ! wget -q --timeout=30 --tries=3 -O "$TEMP_DIR/komari.zip" "$DOWNLOAD_URL"; then
-        error_exit "下载失败，请检查网络和 URL"
+        echo "主地址下载失败，尝试备用地址..."
+        if ! wget -q --timeout=30 --tries=3 -O "$TEMP_DIR/komari.zip" "$DOWNLOAD_URL_BACKUP"; then
+            error_exit "下载失败，主备地址均不可用，请检查网络"
+        fi
+        echo "备用地址下载成功"
     fi
     
     # 4. 验证文件
@@ -113,6 +186,8 @@ main() {
 
 应用路径: $TARGET_DIR/komari
 
+提示：以后更新可直接运行 ${CMD_NAME} 命令
+
 EOF
         success_exit "Komari 已成功更新到 1Panel 应用商店"
     else
@@ -130,6 +205,8 @@ EOF
 5. 点击安装，可自行更改配置
 
 应用路径: $TARGET_DIR/komari
+
+提示：以后更新可直接运行 ${CMD_NAME} 命令
 
 EOF
         success_exit "Komari 已成功添加到 1Panel 应用商店"
