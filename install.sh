@@ -155,8 +155,8 @@ main() {
         "komari/data.yml"
         "komari/logo.png"
         "komari/README.md"
-        "komari/1.1.4/data.yml"
-        "komari/1.1.4/docker-compose.yml"
+        "komari/1.1.5/data.yml"
+        "komari/1.1.5/docker-compose.yml"
     )
     
     for file in "${required_files[@]}"; do
