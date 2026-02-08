@@ -34,8 +34,8 @@ jobs:
             NEW_VERSION="${LATEST_TAG#v}"
           fi
           
-          # 从install.sh提取当前版本（假设格式：komari/X.X.X/...）
-          CURRENT_VERSION=$(grep -oP 'komari/\K[0-9]+\.[0-9]+\.[0-9]+' install.sh | head -1)
+          # 修正正则：允许匹配数字版本号后的字母或后缀
+          CURRENT_VERSION=$(grep -oP 'komari/\K[0-9]+\.[0-9]+\.[0-9]+[^/]*' install.sh | head -1)
           
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
@@ -56,11 +56,11 @@ jobs:
           sed -i "s|ghcr.io/komari-monitor/komari:${OLD_VER}|ghcr.io/komari-monitor/komari:${NEW_VER}|g" \
             "komari/${NEW_VER}/docker-compose.yml"
           
-          # 3. 更新install.sh中的版本号引用（验证列表）
+          # 3. 更新install.sh中的版本号引用
           sed -i "s|${OLD_VER}/data.yml|${NEW_VER}/data.yml|g" install.sh
           sed -i "s|${OLD_VER}/docker-compose.yml|${NEW_VER}/docker-compose.yml|g" install.sh
           
-          # 4. 重新打包zip（排除旧zip和git目录）
+          # 4. 重新打包zip
           rm -f komari.zip
           zip -r komari.zip komari/ -x "*.git*"
           
@@ -74,8 +74,8 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
           git add install.sh komari.zip
-          git add "komari/${{ steps.detect.outputs.new_ver }}" || true
-          # 删除旧版本目录的git记录（已重命名）
+          # 修正了变量名，统一使用 new_version
+          git add "komari/${{ steps.detect.outputs.new_version }}" || true
           git add -u "komari/" || true
           
           git commit -m "chore: bump to v${{ steps.detect.outputs.new_version }}
